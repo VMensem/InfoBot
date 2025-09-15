@@ -1,5 +1,5 @@
 import re
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 
 def validate_nickname(nickname: str) -> Tuple[bool, Optional[str]]:
     """
@@ -26,6 +26,47 @@ def validate_nickname(nickname: str) -> Tuple[bool, Optional[str]]:
     
     return True, None
 
+
+# Полный список серверов Arizona RP
+ARIZONA_SERVERS: Dict[int, str] = {
+    1: "Phoenix",
+    2: "Tucson",
+    3: "Scottdale",
+    4: "Chandler",
+    5: "Brainburg",
+    6: "Saint-Rose",
+    7: "Mesa",
+    8: "Red-Rock",
+    9: "Yuma",
+    10: "Surprise",
+    11: "Prescott",
+    12: "Glendale",
+    13: "Kingman",
+    14: "Winslow",
+    15: "Payson",
+    16: "Gilbert",
+    17: "Show Low",
+    18: "Casa-Grande",
+    19: "Page",
+    20: "Sun-City",
+    21: "Queen-Creek",
+    22: "Sedona",
+    23: "Holiday",
+    24: "Wednesday",
+    25: "Yava",
+    26: "Faraway",
+    27: "Bumble Bee",
+    28: "Christmas",
+    29: "Mirage",
+    30: "Love",
+    31: "Drake",
+    32: "Space",
+    101: "Mobile I",
+    102: "Mobile II",
+    103: "Mobile III",
+    1000: "Vice City"
+}
+
 def validate_server_id(server_id: int) -> Tuple[bool, Optional[str]]:
     """
     Validate server ID for Arizona RP
@@ -36,20 +77,12 @@ def validate_server_id(server_id: int) -> Tuple[bool, Optional[str]]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # Arizona RP server IDs (ПК серверы 1-31, мобайл 101-103)
-    valid_servers = {}
-    # ПК серверы
-    for i in range(1, 32):  # Серверы с 1 по 31
-        valid_servers[i] = f"ПК-{i}"
-    # Мобайл серверы
-    for i in range(101, 104):  # Серверы 101, 102, 103
-        valid_servers[i] = f"Мобайл-{i}"
-    
-    if server_id not in valid_servers:
-        server_list = "\n".join([f"{id}: {name}" for id, name in sorted(valid_servers.items())])
+    if server_id not in ARIZONA_SERVERS:
+        server_list = "\n".join([f"{id}: {name}" for id, name in ARIZONA_SERVERS.items()])
         return False, f"Неверный ID сервера. Доступные серверы Arizona RP:\n{server_list}"
     
     return True, None
+
 
 def truncate_message(message: str, max_length: int = 2000) -> str:
     """
@@ -66,6 +99,7 @@ def truncate_message(message: str, max_length: int = 2000) -> str:
         return message
     
     return message[:max_length - 3] + "..."
+
 
 def escape_markdown(text: str) -> str:
     """
