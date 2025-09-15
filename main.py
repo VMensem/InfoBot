@@ -1,4 +1,23 @@
 #!/usr/bin/env python3
+# ---- Flask dummy server для Render ----
+from flask import Flask
+import threading
+import os
+
+app = Flask(__name__)
+
+@app.route("/")
+def index():
+    return "Bot is running 🚀"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))  # Render задаёт порт через переменную PORT
+    app.run(host="0.0.0.0", port=port)
+
+# Запуск Flask в отдельном потоке, чтобы не блокировать asyncio
+flask_thread = threading.Thread(target=run_flask, daemon=True)
+flask_thread.start()
+
 """
 Dual-Platform Gaming Statistics Bot
 Supports both Discord and Telegram platforms
