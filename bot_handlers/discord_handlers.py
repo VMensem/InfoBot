@@ -11,7 +11,7 @@ class DiscordBotHandlers:
             servers_text = await arizona_api.get_servers_info()
             await msg.edit(content=servers_text)
 
-        @self.bot.command(name="player")
+        @self.bot.command(name="stats")
         async def player(ctx, nickname: str = None, server_id: int = None):
             if not nickname or server_id is None:
                 await ctx.send("⚠️ Использование: !player <ник> <ID сервера>")
