@@ -12,9 +12,9 @@ class DiscordBotHandlers:
             await msg.edit(content=servers_text)
 
         @self.bot.command(name="stats")
-        async def player(ctx, nickname: str = None, server_id: int = None):
+        async def stats(ctx, nickname: str = None, server_id: int = None):
             if not nickname or server_id is None:
-                await ctx.send("⚠️ Использование: !player <ник> <ID сервера>")
+                await ctx.send("⚠️ Использование: !stats <ник> <ID сервера>")
                 return
 
             valid_nick, error = arizona_api.validate_nickname(nickname)
