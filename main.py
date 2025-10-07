@@ -6,7 +6,7 @@ import asyncio
 import logging
 import sys
 
-from config.config import config
+from config import config
 from bot_handlers.telegram_handlers import TelegramBotHandlers
 from bot_handlers.discord_handlers import DiscordBotHandlers
 from arizona_api_client import arizona_api
