@@ -7,10 +7,10 @@ import aiohttp
 from typing import Dict, Any, Tuple, Optional
 import re
 from datetime import datetime
-
+import os
 # Настройки (можно вынести в config)
-API_URL = "https://api.arizona-rp.com/player"
-API_KEY = "ТВОЙ_API_KEY"  # Поставь свой ключ
+API_URL = os.getenv("API_URL")
+API_KEY = os.getenv("API_KEY")
 REQUEST_TIMEOUT = 10
 
 
