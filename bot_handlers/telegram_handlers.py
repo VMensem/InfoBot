@@ -9,7 +9,7 @@ class TelegramBotHandlers:
 
         # Регистрируем команды
         self.dp.message.register(self.servers_command, Command("servers"))
-        self.dp.message.register(self.player_command, Command("player"))
+        self.dp.message.register(self.stats_command, Command("stats"))
 
     async def start_polling(self):
         await self.dp.start_polling(self.bot, skip_updates=True)
@@ -19,10 +19,10 @@ class TelegramBotHandlers:
         servers_text = await arizona_api.get_servers_info()
         await msg.edit_text(servers_text)
 
-    async def player_command(self, message: types.Message):
+    async def stats_command(self, message: types.Message):
         args = message.text.split()
         if len(args) < 3:
-            await message.answer("⚠️ Использование: /player <ник> <ID сервера>\nПример: /player Vlad_Mensem 18")
+            await message.answer("⚠️ Использование: /stats <ник> <ID сервера>\nПример: /stats Vlad_Mensem 18")
             return
 
         nickname = args[1]
