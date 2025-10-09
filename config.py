@@ -18,3 +18,4 @@ class Config:
 config = Config()
 API_URL = os.getenv("API_URL")
 API_KEY = os.getenv("API_KEY")
+REQUEST_TIMEOUT = 10
