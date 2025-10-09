@@ -16,3 +16,5 @@ class Config:
         return ok
 
 config = Config()
+API_URL = os.getenv("API_URL")
+API_KEY = os.getenv("API_KEY")
