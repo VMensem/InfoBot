@@ -10,7 +10,7 @@ import re
 import time
 from datetime import datetime, timedelta
 
-from unified_config import API_URL, API_KEY, REQUEST_TIMEOUT
+from config import API_URL, API_KEY, REQUEST_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
