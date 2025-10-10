@@ -1,21 +1,11 @@
+# config/config.py
 import os
 
-class Config:
-    DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-    DISCORD_COMMAND_PREFIX = "!"
+API_URL = os.getenv("API_URL", "https://api.depscian.tech/v2/player")
+API_KEY = os.getenv("API_KEY", "")
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "10"))
 
-    def validate(self):
-        ok = True
-        if not self.DISCORD_TOKEN:
-            print("❌ Отсутствует DISCORD_TOKEN")
-            ok = False
-        if not self.TELEGRAM_TOKEN:
-            print("❌ Отсутствует TELEGRAM_TOKEN")
-            ok = False
-        return ok
-
-config = Config()
-API_URL = os.getenv("API_URL")
-API_KEY = os.getenv("API_KEY")
-REQUEST_TIMEOUT = 10
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+DISCORD_COMMAND_PREFIX = os.getenv("DISCORD_COMMAND_PREFIX", "!")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
