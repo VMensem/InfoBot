@@ -1,93 +1,75 @@
+# main.py
 #!/usr/bin/env python3
-from flask import Flask
-import threading
 import os
+import sys
+import threading
 import asyncio
 import logging
-import sys
 
-from config import config
-from bot_handlers.telegram_handlers import TelegramBotHandlers
-from bot_handlers.discord_handlers import DiscordBotHandlers
-from arizona_api_client import arizona_api
-
-import discord
-from discord.ext import commands
-from aiogram import Bot
-
-# ---------------- Flask для Render ----------------
+# Flask keepalive so Render won't sleep (параллельно)
+from flask import Flask
 app = Flask(__name__)
 
 @app.route("/")
 def index():
-    return "Bot is running 🚀"
+    return "InfoBot is running 🚀"
 
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
 
+# start flask thread
 flask_thread = threading.Thread(target=run_flask, daemon=True)
 flask_thread.start()
 
-# ---------------- Основной класс бота ----------------
-class DualPlatformBot:
-    def __init__(self):
-        self.discord_bot = None
-        self.telegram_bot = None
-        self.telegram_handlers = None
-        self.discord_handlers = None
-        self.running = False
+# logging
+from config.config import DISCORD_TOKEN, TELEGRAM_TOKEN, DISCORD_COMMAND_PREFIX, LOG_LEVEL
+logging.basicConfig(level=LOG_LEVEL)
+logger = logging.getLogger("InfoBot")
 
-    # ---------------- Discord ----------------
-    def setup_discord_bot(self):
-        intents = discord.Intents.default()
-        intents.message_content = True
-        self.discord_bot = commands.Bot(
-            command_prefix=config.DISCORD_COMMAND_PREFIX,
-            intents=intents,
-            help_command=None
-        )
-        self.discord_handlers = DiscordBotHandlers(self.discord_bot)
-        print("✅ Discord bot configured")
+# import bots
+from aiogram import Bot as AiogramBot
+from bot_handlers.telegram_handlers import TelegramBotHandlers
+from bot_handlers.discord_handlers import DiscordBotHandlers
 
-    async def start_discord_bot(self):
-        if self.discord_bot:
-            await self.discord_bot.start(config.DISCORD_TOKEN)
+import discord
+from discord.ext import commands
 
-    # ---------------- Telegram ----------------
-    def setup_telegram_bot(self):
-        self.telegram_bot = Bot(token=config.TELEGRAM_TOKEN)
-        self.telegram_handlers = TelegramBotHandlers(self.telegram_bot)
-        print("✅ Telegram bot configured")
+async def start_bots():
+    # Telegram setup
+    if not TELEGRAM_TOKEN:
+        logger.error("TELEGRAM_TOKEN is not set in environment")
+        sys.exit(1)
+    tg_bot = AiogramBot(token=TELEGRAM_TOKEN)
+    tg_handlers = TelegramBotHandlers(tg_bot)
 
-    async def start_telegram_bot(self):
-        if self.telegram_handlers:
-            await self.telegram_handlers.start_polling()
+    # Discord setup
+    if not DISCORD_TOKEN:
+        logger.error("DISCORD_TOKEN is not set in environment")
+        sys.exit(1)
+    intents = discord.Intents.default()
+    intents.message_content = True
+    discord_bot = commands.Bot(command_prefix=DISCORD_COMMAND_PREFIX, intents=intents, help_command=None)
+    DiscordBotHandlers(discord_bot)
 
-    # ---------------- Запуск ----------------
-    async def run(self):
-        if not config.validate():
-            print("❌ Конфигурация не валидна")
-            return False
-        self.setup_discord_bot()
-        self.setup_telegram_bot()
-        self.running = True
+    # Run both
+    loop = asyncio.get_running_loop()
 
-        discord_task = asyncio.create_task(self.start_discord_bot())
-        telegram_task = asyncio.create_task(self.start_telegram_bot())
+    # Telegram polling in background task
+    tg_task = loop.create_task(tg_handlers.start_polling(), name="telegram_polling")
 
-        await asyncio.gather(discord_task, telegram_task, return_exceptions=True)
+    # Discord start (blocking) -> run in task
+    discord_task = loop.create_task(discord_bot.start(DISCORD_TOKEN), name="discord_start")
 
-
-# ---------------- Запуск ----------------
-async def main():
-    bot = DualPlatformBot()
-    try:
-        await bot.run()
-    except KeyboardInterrupt:
-        print("🛑 Боты остановлены пользователем")
-    except Exception as e:
-        print(f"❌ Ошибка: {e}")
+    # Wait for tasks to finish (they shouldn't on normal run)
+    gathered = await asyncio.gather(tg_task, discord_task, return_exceptions=True)
+    logger.info("Bots finished: %s", gathered)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(start_bots())
+    except KeyboardInterrupt:
+        logger.info("Shutdown by user")
+    except Exception as e:
+        logger.exception("Fatal error in main: %s", e)
+        sys.exit(1)
