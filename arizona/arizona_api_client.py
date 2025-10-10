@@ -1,3 +1,4 @@
+# arizona/arizona_api_client.py
 """
 API client for fetching player statistics from Arizona RP servers via Deps API
 """
@@ -10,7 +11,7 @@ import re
 import time
 from datetime import datetime, timedelta
 
-from config import API_URL, API_KEY, REQUEST_TIMEOUT
+from config.config import API_URL, API_KEY, REQUEST_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -23,75 +24,36 @@ class ArizonaRPAPIClient:
         self.timeout = REQUEST_TIMEOUT
         
         # Кэш для статуса серверов
-        self._servers_cache = {}
-        self._cache_timestamp = None
+        self._servers_cache: Dict[int, Dict[str, Any]] = {}
+        self._cache_timestamp: Optional[datetime] = None
         self._cache_duration = 300  # 5 минут
         
         # Rate limiting
-        self._last_request_time = 0
+        self._last_request_time = 0.0
         self._request_delay = 0.5  # 500ms между запросами
 
     def validate_nickname(self, nickname: str) -> Tuple[bool, Optional[str]]:
-        """
-        Validate player nickname format
-        
-        Args:
-            nickname: Player nickname to validate
-            
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
         if not nickname:
             return False, "Ник игрока не может быть пустым."
-        
         if len(nickname) < 3:
             return False, "Ник игрока должен содержать минимум 3 символа."
-        
         if len(nickname) > 24:
             return False, "Ник игрока не может содержать более 24 символов."
-        
-        # Check for valid characters (letters, numbers, underscore)
         if not re.match(r'^[a-zA-Z0-9_]+$', nickname):
             return False, "Ник может содержать только буквы, цифры и подчёркивания."
-        
         return True, None
 
     def validate_server_id(self, server_id: int) -> Tuple[bool, Optional[str]]:
-        """
-        Validate server ID for Arizona RP
-        
-        Args:
-            server_id: Server ID to validate
-            
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
-        # Arizona RP server IDs (ПК серверы 1-31, мобайл 101-103)
         valid_servers = {}
-        # ПК серверы
-        for i in range(1, 32):  # Серверы с 1 по 31
+        for i in range(1, 32):
             valid_servers[i] = f"ПК-{i}"
-        # Мобайл серверы
-        for i in range(101, 104):  # Серверы 101, 102, 103
+        for i in range(101, 104):
             valid_servers[i] = f"Мобайл-{i}"
-        
         if server_id not in valid_servers:
             return False, f"Неверный ID сервера. Доступные серверы Arizona RP: ПК 1-31, Мобайл 101-103"
-        
         return True, None
 
     async def fetch_player_stats(self, nickname: str, server_id: int) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-        """
-        Fetch player statistics from the gaming API
-        
-        Args:
-            nickname: Player's nickname
-            server_id: Server identifier
-            
-        Returns:
-            Tuple of (data, error_message). If successful, data contains stats and error is None.
-            If failed, data is None and error contains the error message.
-        """
         if not self.api_key:
             return None, "❌ API ключ не настроен. Обратитесь к администратору."
         
@@ -126,14 +88,11 @@ class ArizonaRPAPIClient:
                         logger.error(f"Failed to parse JSON response: {e}")
                         return None, "❌ Ошибка обработки ответа от API."
                     
-                    # Check for API-specific errors
                     if "error_code" in data:
                         error_code = data.get("error_code", "")
                         error_msg = data.get("error_message", "Неизвестная ошибка")
-                        
                         if error_code == "FORBIDDEN":
-                            return None, f"🔒 **Требуется подтверждение IP адреса**\n\n{error_msg}\n\n💡 Обратитесь к администратору для активации API доступа с этого сервера."
-                        
+                            return None, f"🔒 Требуется подтверждение IP адреса: {error_msg}"
                         return None, f"❌ Ошибка API ({error_code}): {error_msg}"
                     
                     if "error" in data:
@@ -144,7 +103,6 @@ class ArizonaRPAPIClient:
                         error_msg = data.get("error", {}).get("message", "Неизвестная ошибка")
                         return None, f"❌ Ошибка API: {error_msg}"
                     
-                    # Validate response structure
                     if not self._validate_response(data):
                         return None, "❌ Некорректный формат ответа от API."
                     
@@ -163,34 +121,30 @@ class ArizonaRPAPIClient:
             return None, "❌ Произошла неожиданная ошибка при получении статистики."
     
     def _validate_response(self, data: Dict[str, Any]) -> bool:
-        """Validate that the API response has expected structure"""
         if not isinstance(data, dict):
             return False
-        
-        # Check for new API structure
         if "id" in data and "level" in data:
             return True
-        
-        # Alternative structure check
         if any(key in data for key in ["statistics", "account_id", "nickname"]):
             return True
-        
         return False
     
     def create_progress_bar(self, value, max_value: int = 100, length: int = 10) -> str:
-        """Create a progress bar for health, hunger, etc."""
         if value is None:
             value = 0
         try:
             value = int(value)
             filled = int((value / max_value) * length)
+            if filled < 0:
+                filled = 0
+            if filled > length:
+                filled = length
             bar = "█" * filled + "░" * (length - filled)
             return f"[{bar}] {value}%"
         except (ValueError, TypeError, ZeroDivisionError):
             return f"[{'░' * length}] 0%"
 
     def format_money(self, amount) -> str:
-        """Format money with thousand separators"""
         if amount is None:
             return "$0"
         try:
@@ -199,38 +153,20 @@ class ArizonaRPAPIClient:
             return f"${amount}"
 
     def format_stats(self, data: Dict[str, Any], nickname: str, server_id: int) -> str:
-        """
-        Format Arizona RP player statistics for display with beautiful formatting
-        
-        Args:
-            data: Raw API response data 
-            nickname: Player nickname
-            server_id: Server ID
-            
-        Returns:
-            Formatted statistics string matching Arizona RP style
-        """
         try:
-            # Handle the new API response format directly
             player_data = data
-            
             if not player_data or "error" in data or "id" not in player_data:
                 return f"❌ Игрок '{nickname}' не найден на сервере {server_id}."
             
-            # Get server name from the API response
             server_info = player_data.get("server", {})
             server_name = server_info.get("name", f"Сервер {server_id}")
             
-            # Start building the formatted message
             msg = f"👤 Информация об игроке {nickname}\n\n"
             msg += f"🌐 Сервер: {server_name} (ID: {server_info.get('id', server_id)})\n\n"
-            
-            # Player ID and basic info
             msg += f"🆔 ID игрока: {player_data['id']}\n"
             msg += f"📱 Телефон: {player_data.get('phone_number', 'Неизвестно')}\n"
             msg += f"⏱ Отыграно часов: {player_data.get('hours_played', 0)}\n\n"
             
-            # Level and Experience
             level_info = player_data.get("level", {})
             if isinstance(level_info, dict):
                 current_level = level_info.get("level", 0)
@@ -241,7 +177,6 @@ class ArizonaRPAPIClient:
             elif isinstance(level_info, (int, str)):
                 msg += f"🌟 Уровень: {level_info}\n\n"
             
-            # Health, Hunger, Drug addiction
             health = player_data.get("health", 0)
             hunger = player_data.get("hunger", 0)
             drug_addiction = player_data.get("drug_addiction", 0)
@@ -252,7 +187,6 @@ class ArizonaRPAPIClient:
             msg += f"🍗 Голод: {hunger_bar}\n"
             msg += f"💉 Наркозависимость: {drug_addiction}%\n\n"
             
-            # VIP Status
             vip_info = player_data.get("vip_info", {})
             if vip_info:
                 vip_level = vip_info.get("level", "None")
@@ -262,7 +196,6 @@ class ArizonaRPAPIClient:
                     msg += f"➕ Доп. VIP: {add_vip}\n"
                 msg += "\n"
             
-            # Financial Information
             money_info = player_data.get("money", {})
             if money_info:
                 msg += f"💰 Финансы:\n"
@@ -282,7 +215,6 @@ class ArizonaRPAPIClient:
                 msg += f"  📱 Баланс телефона: {self.format_money(phone_balance)}\n"
                 msg += f"  ❤️ Благотворительность: {self.format_money(charity)}\n\n"
             
-            # Job and Organization
             job = player_data.get("job", "Безработный")
             msg += f"💼 Работа: {job}\n"
             
@@ -299,7 +231,6 @@ class ArizonaRPAPIClient:
             else:
                 msg += f"🏢 Организация: Нет\n\n"
             
-            # Law and Order
             law_abiding = player_data.get("law_abiding", 0)
             wanted_level = player_data.get("wanted_level", 0)
             warnings = player_data.get("warnings", 0)
@@ -309,7 +240,6 @@ class ArizonaRPAPIClient:
             msg += f"🚨 Уровень розыска: {wanted_level}\n"
             msg += f"⚠️ Предупреждения: {warnings}\n\n"
             
-            # Family information
             family_info = player_data.get("family", {})
             if family_info:
                 family_name = family_info.get("name", "Неизвестно")
@@ -324,7 +254,6 @@ class ArizonaRPAPIClient:
                 msg += f"  🏆 Я лидер: {leader_status}\n"
                 msg += f"  🎖️ Ранг в семье: {member_rank}\n\n"
             
-            # Online Status
             status_info = player_data.get("status", {})
             if status_info:
                 online = status_info.get("online", False)
@@ -341,32 +270,19 @@ class ArizonaRPAPIClient:
             return f"❌ Ошибка при форматировании информации для игрока {nickname}."
 
     def get_server_name(self, server_id: int) -> str:
-        """Get server name by ID"""
         server_names = {
-            # ПК серверы
             1: "Phoenix", 2: "Tucson", 3: "Scottdale", 4: "Chandler", 5: "Brainburg",
-            6: "Saint Rose", 7: "Mesa", 8: "Red-Rock", 9: "Yuma", 10: "Surprise",
+            6: "Saint Rose", 7: "Mesa", 8: "Red Rock", 9: "Yuma", 10: "Surprise",
             11: "Prescott", 12: "Glendale", 13: "Kingman", 14: "Winslow", 15: "Payson",
-            16: "Gilbert", 17: "Show Low", 18: "Casa-Grande", 19: "Page", 20: "Sun-City",
-            21: "Queen-Creek", 22: "Sedona", 23: "Holiday", 24: "Wednesday", 25: "Yava",
-            26: "Faraway", 27: "Bumble Bee", 28: "Christmas", 29: "Mirage", 30: "Love", 31: "Miracle",
-            # Мобайл серверы
+            16: "Gilbert", 17: "Show Low", 18: "Casa Grande", 19: "Page", 20: "Sun City",
+            21: "Queen Creek", 22: "Sedona", 23: "Holiday", 24: "Wednesday", 25: "Yava",
+            26: "Faraway", 27: "Bumble Bee", 28: "Christmas", 29: "Mirage", 30: "Love", 31: "Drake",
             101: "Mobile I", 102: "Mobile II", 103: "Mobile III"
         }
         return server_names.get(server_id, f"Server {server_id}")
 
     async def fetch_server_status(self, server_id: int) -> Dict[str, Any]:
-        """
-        Fetch server status and online count with rate limiting
-        
-        Args:
-            server_id: Arizona RP server ID
-            
-        Returns:
-            Dict with server status information
-        """
         try:
-            # Validate server ID
             is_valid, error = self.validate_server_id(server_id)
             if not is_valid:
                 return {
@@ -384,10 +300,8 @@ class ArizonaRPAPIClient:
                     "is_online": False
                 }
             
-            # Rate limiting
             await self._rate_limit()
             
-            # Формируем запрос для получения информации о сервере
             url = f"{self.api_url}/server/info"
             params = {
                 "key": self.api_key,
@@ -398,54 +312,19 @@ class ArizonaRPAPIClient:
             
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url, params=params) as response:
-                    # Обрабатываем различные HTTP статусы
                     if response.status == 429:
                         logger.warning(f"Rate limit exceeded for server {server_id}")
-                        return {
-                            "status": "rate_limit", 
-                            "error": "Превышен лимит запросов",
-                            "online": 0,
-                            "is_online": False
-                        }
+                        return {"status":"rate_limit","error":"Превышен лимит","online":0,"is_online":False}
                     elif response.status == 401:
-                        logger.error(f"Unauthorized access for server {server_id}")
-                        return {
-                            "status": "unauthorized", 
-                            "error": "Неверный API ключ",
-                            "online": 0,
-                            "is_online": False
-                        }
-                    elif response.status == 403:
-                        logger.error(f"Forbidden access for server {server_id}")
-                        return {
-                            "status": "forbidden", 
-                            "error": "Доступ запрещен",
-                            "online": 0,
-                            "is_online": False
-                        }
+                        return {"status":"unauthorized","error":"Неверный API ключ","online":0,"is_online":False}
                     elif response.status != 200:
-                        logger.error(f"Server info API error: HTTP {response.status}")
-                        return {
-                            "status": "api_error", 
-                            "error": f"HTTP {response.status}",
-                            "online": 0,
-                            "is_online": False
-                        }
+                        return {"status":"api_error","error":f"HTTP {response.status}","online":0,"is_online":False}
                     
                     data = await response.json()
-                    
-                    # Проверяем статус ответа
                     if data.get("status") != "ok":
                         error_msg = data.get("error", "Неизвестная ошибка API")
-                        logger.warning(f"Server info API returned error for server {server_id}: {error_msg}")
-                        return {
-                            "status": "api_error",
-                            "error": error_msg,
-                            "online": 0,
-                            "is_online": False
-                        }
+                        return {"status":"api_error","error":error_msg,"online":0,"is_online":False}
                     
-                    # Извлекаем информацию о сервере
                     server_info = data.get("server", {})
                     online_count = server_info.get("online", 0)
                     server_status = server_info.get("status", "offline")
@@ -459,30 +338,17 @@ class ArizonaRPAPIClient:
                     }
                     
         except asyncio.TimeoutError:
-            logger.warning(f"Timeout fetching server {server_id} status")
-            return {
-                "status": "timeout",
-                "error": "Превышено время ожидания",
-                "online": 0,
-                "is_online": False
-            }
+            return {"status":"timeout","error":"Превышено время ожидания","online":0,"is_online":False}
         except Exception as e:
             logger.error(f"Error fetching server {server_id} status: {e}")
-            return {
-                "status": "error",
-                "error": str(e),
-                "online": 0,
-                "is_online": False
-            }
+            return {"status":"error","error":str(e),"online":0,"is_online":False}
 
     def _is_cache_valid(self) -> bool:
-        """Проверяет актуальность кэша"""
         if not self._cache_timestamp:
             return False
         return (datetime.now() - self._cache_timestamp).total_seconds() < self._cache_duration
 
     async def _rate_limit(self):
-        """Ограничение частоты запросов"""
         current_time = time.time()
         elapsed = current_time - self._last_request_time
         if elapsed < self._request_delay:
@@ -490,54 +356,29 @@ class ArizonaRPAPIClient:
         self._last_request_time = time.time()
 
     async def fetch_all_servers_status(self) -> Dict[int, Dict[str, Any]]:
-        """
-        Fetch status for all Arizona RP servers with caching and rate limiting
-        
-        Returns:
-            Dict mapping server_id to status info
-        """
-        # Проверяем кэш
         if self._is_cache_valid() and self._servers_cache:
             logger.info("Используем кэшированные данные серверов")
             return self._servers_cache.copy()
         
-        servers_info = {}
-        
-        # Создаем список серверов для проверки
+        servers_info: Dict[int, Dict[str, Any]] = {}
         server_ids = list(range(1, 32)) + list(range(101, 104))
         
-        # Выполняем запросы с ограничением скорости
         try:
-            # Разбиваем на батчи по 5 серверов для избежания rate limit
             batch_size = 5
             for i in range(0, len(server_ids), batch_size):
                 batch = server_ids[i:i + batch_size]
-                batch_tasks = []
-                
-                for server_id in batch:
-                    batch_tasks.append(self.fetch_server_status(server_id))
-                
-                # Выполняем батч
+                batch_tasks = [self.fetch_server_status(sid) for sid in batch]
                 batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
                 
-                # Обрабатываем результаты батча
-                for server_id, result in zip(batch, batch_results):
+                for sid, result in zip(batch, batch_results):
                     if isinstance(result, Exception):
-                        logger.error(f"Exception for server {server_id}: {result}")
-                        servers_info[server_id] = {
-                            "status": "error",
-                            "error": str(result),
-                            "online": 0,
-                            "is_online": False
-                        }
+                        servers_info[sid] = {"status":"error","error":str(result),"online":0,"is_online":False}
                     else:
-                        servers_info[server_id] = result
+                        servers_info[sid] = result
                 
-                # Пауза между батчами
                 if i + batch_size < len(server_ids):
                     await asyncio.sleep(1)
             
-            # Обновляем кэш
             self._servers_cache = servers_info.copy()
             self._cache_timestamp = datetime.now()
             logger.info(f"Обновлен кэш статуса серверов ({len(servers_info)} серверов)")
@@ -548,7 +389,6 @@ class ArizonaRPAPIClient:
         return servers_info
 
     def get_servers_info(self) -> str:
-        """Get information about all Arizona RP servers"""
         msg = "🌐 Серверы Arizona RP:\n\n💻 ПК серверы (1-31):\n"
         msg += " 1: Phoenix\n 2: Tucson\n 3: Scottdale\n 4: Chandler\n 5: Brainburg\n 6: Saint Rose\n 7: Mesa\n 8: Red Rock\n 9: Yuma\n10: Surprise\n11: Prescott\n12: Glendale\n13: Kingman\n14: Winslow\n15: Payson\n16: Gilbert\n17: Show Low\n18: Casa Grande\n19: Page\n20: Sun City\n21: Queen Creek\n22: Sedona\n23: Holiday\n24: Wednesday\n25: Yava\n26: Faraway\n27: Bumble Bee\n28: Christmas\n29: Mirage\n30: Love\n31: Drake\n\n"
         
@@ -561,9 +401,9 @@ class ArizonaRPAPIClient:
         return msg
     
     async def get_servers_status_from_api(self) -> str:
-        """Get real-time servers status from Arizona RP API"""
         try:
             timeout = aiohttp.ClientTimeout(total=10)
+            # Тестовый публичный endpoint (как в старом коде)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get("https://api.depscian.tech/v2/status", 
                                      headers={"X-API-Key": "eybfxnIFZJ5ZciisrE14hiOW5dVMjGLb"}) as response:
@@ -576,9 +416,8 @@ class ArizonaRPAPIClient:
                     arizona_servers = data.get("arizona", [])
                     
                     if not arizona_servers:
-                        return self.get_servers_info()  # Fallback to static list
+                        return self.get_servers_info()
                     
-                    # Сортируем серверы по номеру
                     arizona_servers.sort(key=lambda x: x.get("number", 0))
                     
                     msg = "🌐 **Серверы Arizona RP** (Онлайн)\n\n"
@@ -587,7 +426,6 @@ class ArizonaRPAPIClient:
                     total_online = 0
                     online_servers = 0
                     
-                    # ПК серверы (1-31)
                     pc_servers = [s for s in arizona_servers if 1 <= s.get("number", 0) <= 31]
                     for server in pc_servers:
                         server_id = server.get("number", 0)
@@ -603,7 +441,6 @@ class ArizonaRPAPIClient:
                         else:
                             msg += f"❌ {server_id}. {server_name} | Сервер офлайн\n"
                     
-                    # Мобайл серверы (101-103)
                     msg += f"\n📱 **Мобайл серверы:**\n"
                     mobile_servers = [s for s in arizona_servers if 101 <= s.get("number", 0) <= 103]
                     for server in mobile_servers:
@@ -630,67 +467,7 @@ class ArizonaRPAPIClient:
                     
         except Exception as e:
             logger.error(f"Error getting servers status from API: {e}")
-            return self.get_servers_info()  # Fallback to static list
-
-    async def get_servers_info_with_status(self) -> str:
-        """Get information about all Arizona RP servers with direct SAMP query"""
-        try:
-            # Импортируем SAMP Query клиент
-            from samp_query import query_all_servers, format_servers_status
-            
-            logger.info("Выполняем прямые UDP запросы к серверам Arizona RP...")
-            
-            # Выполняем прямые запросы к серверам
-            server_results = await query_all_servers()
-            
-            # Форматируем результат
-            formatted_result = format_servers_status(server_results)
-            
-            logger.info(f"Завершены запросы к {len(server_results)} серверам")
-            
-            return formatted_result
-            
-        except Exception as e:
-            logger.error(f"Error getting servers info with direct query: {e}")
-            # Fallback на API метод
-            try:
-                logger.info("Fallback на API метод...")
-                servers_status = await self.fetch_all_servers_status()
-                
-                msg = "🌐 **Серверы Arizona RP** (через API)\n\n"
-                msg += "📝 **Доступность серверов:**\n\n"
-                
-                total_online = 0
-                online_servers = 0
-                
-                # ПК серверы (1-31)
-                for server_id in range(1, 32):
-                    server_info = servers_status.get(server_id, {})
-                    server_name = self.get_server_name(server_id)
-                    online_count = server_info.get("online", 0)
-                    is_online = server_info.get("is_online", False)
-                    status = server_info.get("status", "unknown")
-                    
-                    if status == "success" and is_online:
-                        msg += f"✅ {server_id}. {server_name} | Онлайн: {online_count} / 1000\n"
-                        total_online += online_count
-                        online_servers += 1
-                    elif status == "success" and not is_online:
-                        msg += f"❌ {server_id}. {server_name} | Сервер офлайн\n"
-                    else:
-                        msg += f"🟡 {server_id}. {server_name} | Данные недоступны\n"
-                
-                msg += f"\n📊 **Общая статистика:**\n"
-                msg += f"🎮 Всего игроков онлайн: **{total_online:,}**\n"
-                msg += f"⚡ Серверов онлайн: **{online_servers}/31**\n"
-                msg += f"\n📝 Статистика игрока: /stats <ник> <ID сервера>\n"
-                msg += f"💡 Пример: /stats Vlad_Mensem 18"
-                
-                return msg
-                
-            except Exception as fallback_error:
-                logger.error(f"Fallback API method also failed: {fallback_error}")
-                return "⚠️ **Серверы временно недоступны**\n\nПопробуйте позже или обратитесь к администратору"
+            return self.get_servers_info()
 
 # Global API client instance
 arizona_api = ArizonaRPAPIClient()
