@@ -1,56 +1,46 @@
+# bot_handlers/discord_handlers.py
 from discord.ext import commands
-from arizona_api_client import arizona_api
+from arizona.arizona_api_client import arizona_api
 
 class DiscordBotHandlers:
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-        @self.bot.command(name="servers")
+        @bot.command(name="servers")
         async def servers(ctx):
-            msg = await ctx.send("⏳ Получаю данные о серверах...")
-            servers_text = await arizona_api.get_servers_info()
-            await msg.edit(content=servers_text)
+            msg = await ctx.send("⏳ Получаю статус серверов...")
+            text = await arizona_api.get_servers_status_from_api()
+            # Discord supports markdown/asterisks
+            await msg.edit(content=text)
 
-        @self.bot.command(name="stats")
+        @bot.command(name="stats")
         async def stats(ctx, nickname: str = None, server_id: int = None):
             if not nickname or server_id is None:
-                await ctx.send("⚠️ Использование: !stats <ник> <ID сервера>")
+                await ctx.send("⚠️ Использование: !stats <ник> <ID сервера>\nПример: !stats Vlad_Mensem 18")
                 return
 
-            valid_nick, error = arizona_api.validate_nickname(nickname)
+            valid_nick, err = arizona_api.validate_nickname(nickname)
             if not valid_nick:
-                await ctx.send(f"❌ {error}")
+                await ctx.send(f"❌ {err}")
                 return
 
-            valid_srv, error = arizona_api.validate_server_id(server_id)
+            valid_srv, err = arizona_api.validate_server_id(server_id)
             if not valid_srv:
-                await ctx.send(f"❌ {error}")
+                await ctx.send(f"❌ {err}")
                 return
 
-            msg = await ctx.send(f"🔍 Получаю данные игрока **{nickname}** с сервера {arizona_api.get_server_name(server_id)}...")
-            data, err = await arizona_api.fetch_player_stats(nickname, server_id)
-            if err:
-                await msg.edit(content=err)
-                return
-            if not data:
-                await msg.edit(content="⚠️ Данные не найдены.")
-                return
+            msg = await ctx.send(f"⏳ Получаю данные игрока {nickname}...")
+            data, error = await arizona_api.fetch_player_stats(nickname, server_id)
+            if error:
+                return await msg.edit(content=error)
 
-            stats = data.get("statistics", {})
-            text = f"""
-👤 **Информация о {nickname} на сервере {arizona_api.get_server_name(server_id)} [{server_id}]**
-
-📌 **Основное:**
-— ⚙️ ID аккаунта: {data.get('account_id', 'Неизвестно')}
-— 🎓 Уровень: {data.get('level', '❔')}
-— 🎮 Отыграно часов: {stats.get('played_hours', '❔')}
-— 💰 Баланс: {stats.get('money', '❔')}$
-
-🏢 **Работа и фракция:**
-— 🪪 Работа: {stats.get('job', '❌')}
-— 💼 Организация: {stats.get('organization', '❌')}
-— 👔 Должность: {stats.get('rank', '❌')}
-
-🔄 Информация обновлена только что
-"""
-            await msg.edit(content=text)
+            result = arizona_api.format_stats(data, nickname, server_id)
+            # Discord messages have 2000 char limit — if long, split
+            if len(result) <= 1900:
+                await msg.edit(content=result)
+            else:
+                # split into chunks
+                chunks = [result[i:i+1900] for i in range(0, len(result), 1900)]
+                await msg.edit(content=chunks[0])
+                for c in chunks[1:]:
+                    await ctx.send(c)
